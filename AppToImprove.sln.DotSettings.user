@@ -1,0 +1,16 @@
+﻿<wpf:ResourceDictionary xml:space="preserve" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:s="clr-namespace:System;assembly=mscorlib" xmlns:ss="urn:shemas-jetbrains-com:settings-storage-xaml" xmlns:wpf="http://schemas.microsoft.com/winfx/2006/xaml/presentation">
+	<s:String x:Key="/Default/Environment/UnitTesting/UnitTestSessionStore/Sessions/=2356f65c_002D0134_002D4cd8_002Da438_002D871c3fe3a5af/@EntryIndexedValue">&lt;SessionState ContinuousTestingMode="0" Name="GetAggregated_RemoteRespondsProperly_AssertCallsAndResults" xmlns="urn:schemas-jetbrains-com:jetbrains-ut-session"&gt;&#xD;
+  &lt;TestAncestor&gt;&#xD;
+    &lt;TestId&gt;NUnit3x::30565224-7BB4-486C-ADA2-62E075CF732C::.NETCoreApp,Version=v3.1::AppToImprove.Tests.AggregatorControllerTests&lt;/TestId&gt;&#xD;
+  &lt;/TestAncestor&gt;&#xD;
+&lt;/SessionState&gt;</s:String>
+	<s:String x:Key="/Default/Environment/UnitTesting/UnitTestSessionStore/Sessions/=53a229d2_002D19c0_002D4edd_002D9d03_002D9729d1d61bc3/@EntryIndexedValue">&lt;SessionState ContinuousTestingMode="0" Name="GetAggregated_RemoteRespondsProperly_AssertCallsAndResults #2" xmlns="urn:schemas-jetbrains-com:jetbrains-ut-session"&gt;&#xD;
+  &lt;TestAncestor&gt;&#xD;
+    &lt;TestId&gt;NUnit3x::30565224-7BB4-486C-ADA2-62E075CF732C::.NETCoreApp,Version=v3.1::AppToImprove.Tests.AggregatorControllerTests.GetAggregated_RemoteRespondsProperly_AssertCallsAndResults&lt;/TestId&gt;&#xD;
+  &lt;/TestAncestor&gt;&#xD;
+&lt;/SessionState&gt;</s:String>
+	<s:String x:Key="/Default/Environment/UnitTesting/UnitTestSessionStore/Sessions/=9da1ea63_002Dc6e7_002D4bc3_002D916c_002De984ee5b47a2/@EntryIndexedValue">&lt;SessionState ContinuousTestingMode="0" IsActive="True" Name="AggregatorControllerTests" xmlns="urn:schemas-jetbrains-com:jetbrains-ut-session"&gt;&#xD;
+  &lt;TestAncestor&gt;&#xD;
+    &lt;TestId&gt;NUnit3x::30565224-7BB4-486C-ADA2-62E075CF732C::.NETCoreApp,Version=v3.1::AppToImprove.Tests.AggregatorControllerTests&lt;/TestId&gt;&#xD;
+  &lt;/TestAncestor&gt;&#xD;
+&lt;/SessionState&gt;</s:String></wpf:ResourceDictionary>
