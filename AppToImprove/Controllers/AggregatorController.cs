@@ -47,7 +47,7 @@ namespace AppToImprove.Controllers
                 .Select(f => f.Summary)
                 .GroupBy(s => s)
                 .OrderByDescending(g => g.Count())  // Order so most frequent summary goes first.
-                .ToArray()[..3].Select(g => g.Key);  // Select 4 most frequent.
+                .ToArray()[..3].Select(g => g.Key);  // Select 3 most frequent.
             
             this._logger.LogInformation($"Received a bit of forecasts: {response.Content.ReadAsStringAsync()}");
 
