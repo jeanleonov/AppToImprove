@@ -1,12 +1,22 @@
+using AppToImprove.Configuration;
+using AppToImprove.Engine;
+using AppToImprove.Models;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
+using Polly.CircuitBreaker;
+using System;
 using System.Collections.Generic;
+using System.Diagnostics;
+using System.IO;
 using System.Linq;
-using System.Net;
 using System.Net.Http;
 using System.Text.Json;
+using System.Threading;
 using System.Threading.Tasks;
-using Microsoft.AspNetCore.Mvc;
-using AppToImprove.Models;
-using Microsoft.Extensions.Logging;
 
 namespace AppToImprove.Controllers
 {
@@ -14,56 +24,165 @@ namespace AppToImprove.Controllers
     [Route("[controller]")]
     public class AggregatorController : ControllerBase
     {
+        private static readonly object _remoteApiCacheKey = $"{nameof(AggregatorController)}::{nameof(QueryRemoteService)}";
+        private const int _cacheTimeoutSeconds = 3;
+        private static readonly TimeSpan _cacheTimeout = TimeSpan.FromMilliseconds(_cacheTimeoutSeconds);
 
         private readonly ILogger<AggregatorController> _logger;
-        private readonly HttpClient _httpClient;
+        private readonly IWeatherForecastService _weatherForecastService;
+        private readonly IMemoryCache _memoryCache;
+        private readonly bool _isDevelopment;
 
-        public AggregatorController(ILogger<AggregatorController> logger, IHttpClientFactory httpClientFactory)
+        public AggregatorController(
+            ILogger<AggregatorController> logger!!,
+            IWeatherForecastService weatherForecastService!!,
+            IMemoryCache memoryCache!!,
+            IWebHostEnvironment env!!)
         {
-            this._logger = logger;
-            this._httpClient = httpClientFactory.CreateClient("ForecastProvider");
+            _logger = logger;
+            _weatherForecastService = weatherForecastService;
+            _memoryCache = memoryCache;
+            _isDevelopment = env.IsDevelopment();
         }
 
-        [HttpGet(Name = "GetAggregated")]
-        public async Task<ActionResult<AggregatedInfo>> Get()
+        [HttpGet(Name = ConfigurationConstants.Routes.AggregatorIndex)]
+        [ResponseCache(Duration = _cacheTimeoutSeconds, Location = ResponseCacheLocation.Client)]
+        public async Task<ActionResult<AggregatedInfo>> Get(CancellationToken cancellationToken)
         {
-            // For simplicity of test application it was implemented as neighbor controller.
-            // But please, consider it as a call to remote independent service.
-            var response = await this._httpClient.GetAsync("WeatherForecast");
+            var (problem, result) = await QueryRemoteService(
+                _remoteApiCacheKey,
+                async () =>
+                {
+                    AggregatedInfo? result;
 
-            if (response.StatusCode == HttpStatusCode.InternalServerError || response.StatusCode == HttpStatusCode.BadRequest)
+                    using (_logger.BeginScope("Fetching weather forecasts."))
+                    {
+                        var sw = Stopwatch.StartNew();
+
+                        var forecasts = _weatherForecastService.GetWeatherForecast(cancellationToken);
+                        result = await Aggregate(forecasts, cancellationToken);
+
+                        var count = result?.ForecastSamples.ToString() ?? "no";
+                        _logger.LogInformation($"Fetched {count} samples from the weather forecast service in {sw.ElapsedMilliseconds} ms.");
+                    }
+
+                    return result;
+                });
+
+            if (problem is not null)
+                return problem;
+
+            if (result == null)
+                return Problem(
+                    "No data available.",
+                    statusCode: StatusCodes.Status204NoContent);
+
+            return result;
+        }
+
+        private static async Task<AggregatedInfo?> Aggregate(
+            IAsyncEnumerable<WeatherForecast> forecasts,
+            CancellationToken cancellationToken)
+        {
+            int count = 0;
+            DateTime dateMin = DateTime.MaxValue, dateMax = DateTime.MinValue;
+            int tempMin = int.MaxValue, tempMax = int.MinValue;
+            double tempAvg = 0;
+            Dictionary<string, int> summaryCounter = new(StringComparer.InvariantCulture);
+
+            await foreach (var forecast in forecasts.WithCancellation(cancellationToken))
             {
-                this._logger.LogError("Not successful response from server");
-                var responseContent = await response.Content.ReadAsStringAsync();
-                return this.Problem($"Got an error response from server: {responseContent}");
+                cancellationToken.ThrowIfCancellationRequested();
+
+                var date = forecast.Date;
+                if (date == null)
+                    continue;
+                if (forecast.Date < dateMin)
+                    dateMin = date.Value;
+                if (forecast.Date > dateMax)
+                    dateMax = date.Value;
+
+                var temp = forecast.TemperatureC;
+                if (temp == null)
+                    continue;
+                if (forecast.TemperatureC < tempMin)
+                    tempMin = temp.Value;
+                if (forecast.TemperatureC > tempMax)
+                    tempMax = temp.Value;
+
+                tempAvg = ((tempAvg * count) + temp.Value) / (count + 1);
+
+                if (!string.IsNullOrEmpty(forecast.Summary))
+                {
+                    if (!summaryCounter.TryGetValue(forecast.Summary, out var summaryValue))
+                        summaryValue = 0;
+                    summaryCounter[forecast.Summary] = summaryValue + 1;
+                }
+
+                count++;
             }
 
-            var forecastsString = await response.Content.ReadAsStringAsync();
-            var forecasts = JsonSerializer.Deserialize<List<WeatherForecast>>(forecastsString, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-            var dates = forecasts.Select(f => f.Date).OrderBy(d => d).ToArray();
-            var temperaturesC = forecasts.Select(f => f.TemperatureC).ToArray();
-            var temperaturesF = forecasts.Select(f => f.TemperatureF).ToArray();
-            var allSummaryWords = forecasts
-                .Select(f => f.Summary)
-                .GroupBy(s => s)
-                .OrderByDescending(g => g.Count())  // Order so most frequent summary goes first.
-                .ToArray()[..3].Select(g => g.Key);  // Select 3 most frequent.
-            
-            this._logger.LogInformation($"Received a bit of forecasts: {response.Content.ReadAsStringAsync()}");
+            if (count == 0)
+                return null;
+
+            var summaryResultEnumerable = summaryCounter
+                .OrderByDescending(x => x.Value)
+                .Select((v, i) => (v, i))
+                .TakeWhile(x => x.i < 3)
+                .Select(x => x.v.Key);
+            var summaryResult = string.Join(' ', summaryResultEnumerable);
 
             return new AggregatedInfo
             {
-                PeriodStart = dates.First(),
-                PeriodEnd = dates.Last(),
-                ForecastSamples = forecasts.Count(),
-                MinTemperatureC = temperaturesC.Min(),
-                MinTemperatureF = temperaturesF.Min(),
-                AvgTemperatureC = (int)temperaturesC.Average(),
-                AvgTemperatureF = (int)temperaturesF.Average(),
-                MaxTemperatureC = temperaturesC.Max(),
-                MaxTemperatureF = temperaturesF.Max(),
-                SummaryWords = string.Join(" ", allSummaryWords),
+                PeriodStart = dateMin,
+                PeriodEnd = dateMax,
+                ForecastSamples = count,
+                MinTemperatureC = tempMin,
+                MinTemperatureF = (int)UnitConverter.TemperatureCelciusToFarenheit(tempMin),
+                AvgTemperatureC = (int)tempAvg,
+                AvgTemperatureF = (int)UnitConverter.TemperatureCelciusToFarenheit(tempAvg),
+                MaxTemperatureC = tempMax,
+                MaxTemperatureF = (int)UnitConverter.TemperatureCelciusToFarenheit(tempMax),
+                SummaryWords = summaryResult,
             };
+        }
+
+        private async Task<(ObjectResult? Problem, T? Result)> QueryRemoteService<T>(object cacheKey, Func<Task<T>> func)
+        {
+            try
+            {
+                if (_isDevelopment)
+                    return (null, await func());
+
+                return (null,
+                    await _memoryCache.GetOrCreateAsync(
+                        cacheKey,
+                        entry =>
+                        {
+                            entry.AbsoluteExpirationRelativeToNow = _cacheTimeout;
+                            return func();
+                        }));
+            }
+            catch (Exception ex)
+            {
+                var detail = ex switch
+                {
+                    BrokenCircuitException => "The data source server is unavailable currently.",
+                    HttpRequestException => "Bad data source server response code.",
+                    JsonException => "Bad data source server response.",
+                    IOException => "Cannot read data source server response.",
+                    _ => null
+                };
+
+                if (detail is null)
+                    throw;
+
+                _logger.LogError(ex, detail);
+
+                return (Problem(
+                    detail,
+                    statusCode: StatusCodes.Status503ServiceUnavailable), default);
+            }
         }
     }
 }

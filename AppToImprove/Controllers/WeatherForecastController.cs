@@ -1,9 +1,9 @@
+using AppToImprove.Models;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Logging;
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using Microsoft.AspNetCore.Mvc;
-using Microsoft.Extensions.Logging;
-using AppToImprove.Models;
 
 namespace AppToImprove.Controllers
 {
@@ -22,7 +22,7 @@ namespace AppToImprove.Controllers
 
         public WeatherForecastController(ILogger<WeatherForecastController> logger)
         {
-            this._logger = logger;
+            _logger = logger;
         }
 
         [HttpGet(Name = "GetWeatherForecast")]
@@ -32,8 +32,8 @@ namespace AppToImprove.Controllers
 
             return randomNumber switch
             {
-                0 => this.Problem(statusCode: 504),
-                1 => this.Problem(statusCode: 400),
+                0 => Problem(statusCode: 504),
+                1 => Problem(statusCode: 400),
                 _ => Enumerable.Range(0, Random.Next(5, 50000))
                     .Select(index => new WeatherForecast
                     {
